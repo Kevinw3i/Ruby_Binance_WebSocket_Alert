@@ -219,6 +219,7 @@ def create_websocket
       Tools::Telegram::send_message("Error Message: #{event.message}")
       reconnect
     end
+  }
 end
 
 def reconnect
