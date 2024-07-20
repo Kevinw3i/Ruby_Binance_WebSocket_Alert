@@ -154,6 +154,13 @@ def detect_vpn_change
   false
 end
 
+def valid_json?(json)
+  JSON.parse(json)
+  true
+rescue JSON::ParserError
+  false
+end
+
 puts "SSL support: #{EM.ssl?}"
 
 def create_websocket
@@ -172,30 +179,35 @@ def create_websocket
 
     ws.on :message do |msg|
       begin
-        # puts msg
-        data = JSON.parse msg.data.to_s
+        if valid_json?(msg.data.to_s)
+          # puts msg
+          data = JSON.parse msg.data.to_s
 
-        $high_price = data.dig('p').to_f * $asset * $currency > $high_price ? data.dig('p').to_f * $asset * $currency : $high_price
-        $deep_price = data.dig('p').to_f * $asset * $currency < $deep_price ? data.dig('p').to_f * $asset * $currency : $deep_price
+          $high_price = data.dig('p').to_f * $asset * $currency > $high_price ? data.dig('p').to_f * $asset * $currency : $high_price
+          $deep_price = data.dig('p').to_f * $asset * $currency < $deep_price ? data.dig('p').to_f * $asset * $currency : $deep_price
 
-        puts "#{data.dig('p').to_f} - At: #{Time.now}".colorize(:light_blue) + "#{ $open_price > data.dig('p').to_f ? $down : $up} TWD: #{$currency}"
-        puts "C: #{format('%.2f', (data.dig('p').to_f * $asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}/#{format('%.2f', (data.dig('p').to_f * $realtime_asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}#{ data.dig('p').to_f > $temp_price ? $up : $down} / S: #{format('%.2f', (data.dig('p').to_f * $asset * $currency - $s_asset).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}" + "#{ data.dig('p').to_f > $temp_price ? $up : $down} / H: #{format('%.2f', $high_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency > $t_high_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_green) : ''} / D: #{format('%.2f', $deep_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency < $t_deep_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_red) : ''}"
+          puts "#{data.dig('p').to_f} - At: #{Time.now}".colorize(:light_blue) + "#{ $open_price > data.dig('p').to_f ? $down : $up} TWD: #{$currency}"
+          puts "C: #{format('%.2f', (data.dig('p').to_f * $asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}/#{format('%.2f', (data.dig('p').to_f * $realtime_asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}#{ data.dig('p').to_f > $temp_price ? $up : $down} / S: #{format('%.2f', (data.dig('p').to_f * $asset * $currency - $s_asset).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}" + "#{ data.dig('p').to_f > $temp_price ? $up : $down} / H: #{format('%.2f', $high_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency > $t_high_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_green) : ''} / D: #{format('%.2f', $deep_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency < $t_deep_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_red) : ''}"
 
-        if data.dig('p').to_f * $asset * $currency > $t_high_price
-          Thread.new { Tools::Telegram::send_message("High / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
-        elsif data.dig('p').to_f * $asset * $currency < $t_deep_price
-          Thread.new { Tools::Telegram::send_message("Down / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
+          if data.dig('p').to_f * $asset * $currency > $t_high_price
+            Thread.new { Tools::Telegram::send_message("High / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
+          elsif data.dig('p').to_f * $asset * $currency < $t_deep_price
+            Thread.new { Tools::Telegram::send_message("Down / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
+          end
+
+          $t_high_price = $high_price
+          $t_deep_price = $deep_price
+          $temp_price = data.dig('p').to_f
+        else
+          Tools::Telegram::send_message("Valid Json Error Server Restart...")
+          reconnect
         end
-
-        $t_high_price = $high_price
-        $t_deep_price = $deep_price
-        $temp_price = data.dig('p').to_f
-
       rescue => exception
-        ws.ping "PING: #{exception.to_s}" do
-          puts "PING: #{exception}".colorize(:red)
-        end
-        puts exception
+        # ws.ping "PING: #{exception.to_s}" do
+        #   puts "PING: #{exception}".colorize(:red)
+        # end
+        puts '=-=-=-= exception =-=-=-='
+        puts exception.message
       end
     end
 
