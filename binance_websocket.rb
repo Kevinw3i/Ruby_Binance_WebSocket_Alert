@@ -12,10 +12,10 @@ Url2 = 'wss://stream.binance.com:9443/ws/busdtwd@aggTrade'
 # 資產
 $asset = 0
 # 付出的代價
-$s_asset = 0
 # 幣別
-$currency = 32.5
+$currency = 0
 $current_ip = '127.0.0.1'
+$currency_first_tag = false
 
 $up = '⬆'.colorize(:light_green)
 $down = '⬇'.colorize(:light_red)
@@ -122,9 +122,14 @@ class Tools::Api
         end
 
         response = JSON.parse(response.body)
+        old_price = $currency
+        new_price = response['data'].find { |rate| rate["pair"] == "TWD_USD" }&.dig("rate")
 
-        $currency = response.blank? ? 32.5 : response['data'].find { |rate| rate["pair"] == "TWD_USD" }&.dig("rate")
-        Thread.new { Tools::Telegram::send_message("Today USDT-TWD: #{$currency}") }
+        $currency = response.blank? ? 32.5 : new_price
+        if old_price != new_price || $currency_first_tag == false
+          $currency_first_tag = true
+          Thread.new { Tools::Telegram::send_message("Current USDT-TWD: #{$currency}") }
+        end
       rescue => exception
         puts exception
       end
@@ -190,9 +195,9 @@ def create_websocket
           puts "C: #{format('%.2f', (data.dig('p').to_f * $asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}/#{format('%.2f', (data.dig('p').to_f * $realtime_asset * $currency).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}#{ data.dig('p').to_f > $temp_price ? $up : $down} / S: #{format('%.2f', (data.dig('p').to_f * $asset * $currency - $s_asset).round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')}" + "#{ data.dig('p').to_f > $temp_price ? $up : $down} / H: #{format('%.2f', $high_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency > $t_high_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_green) : ''} / D: #{format('%.2f', $deep_price.round(2)).gsub(/(\d)(?=\d{3}+\.)/, '\1,')} #{data.dig('p').to_f * $asset * $currency < $t_deep_price ? 'ʕ•ᴥ•ʔ'.colorize(:light_red) : ''}"
 
           if data.dig('p').to_f * $asset * $currency > $t_high_price
-            Thread.new { Tools::Telegram::send_message("High / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
+            Thread.new { Tools::Telegram::send_message("High / Current #{$currency} IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
           elsif data.dig('p').to_f * $asset * $currency < $t_deep_price
-            Thread.new { Tools::Telegram::send_message("Down / Current IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
+            Thread.new { Tools::Telegram::send_message("Down / Current #{$currency} IoTeX Price: #{data.dig('p').to_f.to_s} / Asset: #{data.dig('p').to_f * $asset * $currency}") }
           end
 
           $t_high_price = $high_price
@@ -200,6 +205,7 @@ def create_websocket
           $temp_price = data.dig('p').to_f
         else
           Tools::Telegram::send_message("Valid Json Error Server Restart...")
+          ws.close
           reconnect
         end
       rescue => exception
@@ -223,7 +229,6 @@ def create_websocket
 
     ws.on :close do |event|
       p [:close, event.code, event.reason]
-      ws = nil
       Tools::Telegram::send_message("Server Close")
     end
 
