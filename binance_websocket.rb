@@ -163,6 +163,7 @@ def valid_json?(json)
   JSON.parse(json)
   true
 rescue JSON::ParserError
+  puts 'JSON::ParserError'
   false
 end
 
@@ -174,10 +175,10 @@ def create_websocket
 
     ws.on :open do |event|
       Tools::Telegram::send_message("Server Open")
-      Tools::Api.get_24hr_ticker_price
       Tools::Api.get_usdt_to_twd_price
+      Tools::Api.get_24hr_ticker_price
 
-      EM.add_periodic_timer(3600) do
+      EM.add_periodic_timer(60) do
         Tools::Api.get_usdt_to_twd_price
       end
     end
@@ -217,7 +218,7 @@ def create_websocket
       end
     end
 
-    EM.add_periodic_timer(5) do
+    EM.add_periodic_timer(30) do
       if detect_vpn_change
         puts 'Reset IP'
         $current_ip = '127.0.0.1'
